@@ -9,6 +9,7 @@ pub struct Lexer<R> {
     reader: BufReader<R>,
     line_number: usize,
     char_number: usize,
+    peeked_char: Option<char>,
 }
 
 impl<R: Read> Lexer<R> {
@@ -17,9 +18,14 @@ impl<R: Read> Lexer<R> {
             reader: BufReader::new(input),
             line_number: 1,
             char_number: 0,
+            peeked_char: None,
         }
     }
 
+    // Read the next character from the buffer. Will return `None` if reached
+    // the end of the file or input stream. This function will track the
+    // position (line and character numbers) in the input. The read character
+    // will be appened to the provide lexeme string also.
     fn next_char(&mut self, lexeme: &mut String) -> Option<char> {
         let c = self.next_char_no_update();
         if let Some(c) = c {
@@ -29,22 +35,35 @@ impl<R: Read> Lexer<R> {
         c
     }
 
+    // Peek the next character in the input and, if it is equal to the given
+    // target character, do the following:
+    // * Track position (line and character numbers) in the input.
+    // * Append the character to the given lexeme.
+    // * Return `true`.
+    // If the peeked character is not equal then do not do the above and just
+    // return `false`.
     fn next_char_if_equals(&mut self, lexeme: &mut String, target: char) -> bool {
         if let Some(c) = self.next_char_no_update() {
             if c == target {
                 self.update_position_tracking(c);
                 lexeme.push(c);
                 return true;
+            } else {
+                self.peeked_char = Some(c);
             }
         }
         false
     }
 
     fn next_char_no_update(&mut self) -> Option<char> {
-        let mut buf = [0];
-        let bytes_read = self.reader.read(&mut buf).unwrap();
-        let c = buf[0] as char;
-        (bytes_read > 0).then_some(c)
+        if self.peeked_char.is_some() {
+            self.peeked_char.take()
+        } else {
+            let mut buf = [0];
+            let bytes_read = self.reader.read(&mut buf).unwrap();
+            let c = buf[0] as char;
+            (bytes_read > 0).then_some(c)
+        }
     }
 
     fn update_position_tracking(&mut self, c: char) {
