@@ -43,8 +43,12 @@ impl<R: Read> Lexer<R> {
     // If the peeked character is not equal then do not do the above and just
     // return `false`.
     fn next_char_if_equals(&mut self, lexeme: &mut String, target: char) -> bool {
+        self.next_char_if(lexeme, |c| c == target)
+    }
+
+    fn next_char_if(&mut self, lexeme: &mut String, f: impl Fn(char) -> bool) -> bool {
         if let Some(c) = self.next_char_no_update() {
-            if c == target {
+            if f(c) {
                 self.update_position_tracking(c);
                 lexeme.push(c);
                 return true;
@@ -129,7 +133,10 @@ impl<R: Read> Iterator for Lexer<R> {
                 }
             }
             '0'..='9' => unimplemented!(),
-            'a'..='z' | 'A'..='Z' => unimplemented!(),
+            'a'..='z' | 'A'..='Z' | '_' => {
+                while self.next_char_if(&mut lexeme, is_ident_char) {}
+                choose_identifier_or_keyword_token_type(&lexeme)
+            }
             c if c.is_whitespace() => return self.next(),
             _ => unimplemented!(),
         };
@@ -140,6 +147,27 @@ impl<R: Read> Iterator for Lexer<R> {
             line_number: self.line_number,
             char_number: self.char_number,
         }))
+    }
+}
+
+fn is_ident_char(c: char) -> bool {
+    matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')
+}
+
+fn choose_identifier_or_keyword_token_type(lexeme: &str) -> TokenType {
+    match lexeme {
+        "do" => TokenType::DoKeyword,
+        "end" => TokenType::EndKeyword,
+        "for" => TokenType::ForKeyword,
+        "while" => TokenType::WhileKeyword,
+        "if" => TokenType::IfKeyword,
+        "then" => TokenType::ThenKeyword,
+        "else" => TokenType::ElseKeyword,
+        "fn" => TokenType::FnKeyword,
+        "return" => TokenType::ReturnKeyword,
+        "and" => TokenType::AndKeyword,
+        "or" => TokenType::OrKeyword,
+        _ => TokenType::Identifier,
     }
 }
 
@@ -190,7 +218,10 @@ mod tests {
 
     #[test]
     fn identifiers_and_keywords() {
-        // TODO
+        assert_lex!("a", TokenType::Identifier, "a", 1, 1);
+        assert_lex!("_", TokenType::Identifier, "_", 1, 1);
+        assert_lex!(" ABC_123 ", TokenType::Identifier, "ABC_123", 1, 8);
+        assert_lex!("\nif", TokenType::IfKeyword, "if", 2, 2);
     }
 
     #[test]
