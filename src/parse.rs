@@ -1,21 +1,23 @@
+use std::io::{Read, Seek};
+
 use crate::{ast::Node, lex::Lexer};
 
-pub struct Parser {
-    tokens: Lexer,
+pub struct Parser<R> {
+    tokens: Lexer<R>,
 }
 
-impl Parser {
-    pub fn new(tokens: Lexer) -> Parser {
+impl<R> Parser<R> {
+    pub fn new(tokens: Lexer<R>) -> Self {
         Parser { tokens }
     }
 }
 
-impl Iterator for Parser {
+impl<R: Read + Seek> Iterator for Parser<R> {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for _token in &mut self.tokens {
-            // ...
+        for token in &mut self.tokens {
+            println!("{:?}", token);
         }
         unimplemented!()
     }

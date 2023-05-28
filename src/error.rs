@@ -1,6 +1,6 @@
 use std::{fmt, path::PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Error {
     line_number: usize,
     char_number: usize,
@@ -27,7 +27,7 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ErrorKind {
     Lexical,
     Syntax,
