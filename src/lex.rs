@@ -197,7 +197,7 @@ impl<R: Read> Iterator for Lexer<R> {
 
             _ if c.is_whitespace() => return self.next(),
 
-            _ => Err(self.new_error(LexicalErrorKind::UnexpectedCharacter(c))),
+            _ => Err(self.new_error(LexicalErrorKind::UnexpectedCharacter)),
         };
 
         Some(tok_type.map(|tok_type| Token {
@@ -218,7 +218,7 @@ fn is_number_char(c: char) -> bool {
 }
 
 fn is_escape_code_char(c: char) -> bool {
-    matches!(c, '\\' | 'n' | 't')
+    matches!(c, '\\' | 'n' | 't' | '\'' | '0')
 }
 
 fn is_valid_char_literal(c: char) -> bool {
@@ -300,7 +300,7 @@ mod tests {
         assert_token!("1234", TokenType::IntLiteral, "1234", 1, 4);
         assert_token!("1.\n", TokenType::FloatLiteral, "1.", 1, 2);
         assert_token!(" 123.456 ", TokenType::FloatLiteral, "123.456", 1, 8);
-        assert_error!(".", LexicalErrorKind::UnexpectedCharacter('.'), "", 1, 1);
+        assert_error!(".", LexicalErrorKind::UnexpectedCharacter, "", 1, 1);
         assert_error!("1.2.3", LexicalErrorKind::InvalidFloatLiteral, "", 1, 4);
     }
 

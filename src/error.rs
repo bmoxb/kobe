@@ -44,7 +44,7 @@ impl fmt::Display for ErrorKind {
 
 #[derive(Debug, PartialEq)]
 pub enum LexicalErrorKind {
-    UnexpectedCharacter(char),
+    UnexpectedCharacter,
     InvalidFloatLiteral,
     InvalidCharLiteral,
     InvalidEscapeCode,
@@ -53,9 +53,7 @@ pub enum LexicalErrorKind {
 impl fmt::Display for LexicalErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            LexicalErrorKind::UnexpectedCharacter(c) => {
-                write!(f, "unexpected character {c:?} in input")
-            }
+            LexicalErrorKind::UnexpectedCharacter => write!(f, "unexpected character in input"),
             LexicalErrorKind::InvalidFloatLiteral => write!(f, "invalid floating-point literal"),
             LexicalErrorKind::InvalidCharLiteral => write!(f, "invalid character literal"),
             LexicalErrorKind::InvalidEscapeCode => write!(f, "invalid escape code"),
