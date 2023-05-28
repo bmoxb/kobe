@@ -14,6 +14,9 @@ impl Iterator for Parser {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {
+        for _token in &mut self.tokens {
+            // ...
+        }
         unimplemented!()
     }
 }

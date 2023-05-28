@@ -10,6 +10,9 @@ impl CodeGenerator {
     }
 
     pub fn generate_wasm(self) -> Result<Vec<u8>> {
+        for _node in self.nodes {
+            // ...
+        }
         unimplemented!()
     }
 }

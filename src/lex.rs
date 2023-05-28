@@ -1,6 +1,9 @@
 use std::io::{BufReader, Read};
 
-use crate::{error::Result, token::Token};
+use crate::{
+    error::Result,
+    token::{Token, TokenType},
+};
 
 pub struct Lexer {
     reader: BufReader<Box<dyn Read>>,
@@ -38,6 +41,11 @@ impl Iterator for Lexer {
     fn next(&mut self) -> Option<Self::Item> {
         let c = self.next_char()?;
         print!("{}", c);
-        unimplemented!()
+        Some(Ok(Token {
+            tok_type: TokenType::KeywordFn,
+            lexeme: "".to_string(),
+            line_number: self.line_number,
+            char_number: self.char_number,
+        }))
     }
 }
