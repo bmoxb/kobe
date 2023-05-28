@@ -113,6 +113,22 @@ impl<R: Read> Lexer<R> {
         }
     }
 
+    fn handle_char_literal(&mut self, lexeme: &mut String) -> Result<TokenType> {
+        if self.next_char_if_equals(lexeme, '\\') {
+            if self.next_char_if(lexeme, is_escape_code_char).is_none() {
+                return Err(self.new_error(LexicalErrorKind::InvalidEscapeCode));
+            }
+        } else if self.next_char_if(lexeme, is_valid_char_literal).is_none() {
+            return Err(self.new_error(LexicalErrorKind::InvalidCharLiteral));
+        }
+
+        if self.next_char_if_equals(lexeme, '\'') {
+            Ok(TokenType::CharLiteral)
+        } else {
+            Err(self.new_error(LexicalErrorKind::InvalidCharLiteral))
+        }
+    }
+
     fn new_error(&mut self, kind: LexicalErrorKind) -> Error {
         Error {
             kind: ErrorKind::Lexical(kind),
@@ -177,6 +193,8 @@ impl<R: Read> Iterator for Lexer<R> {
 
             'a'..='z' | 'A'..='Z' | '_' => Ok(self.handle_ident_or_keyword(&mut lexeme)),
 
+            '\'' => self.handle_char_literal(&mut lexeme),
+
             _ if c.is_whitespace() => return self.next(),
 
             _ => Err(self.new_error(LexicalErrorKind::UnexpectedCharacter(c))),
@@ -197,6 +215,14 @@ fn is_ident_char(c: char) -> bool {
 
 fn is_number_char(c: char) -> bool {
     matches!(c, '0'..='9' | '.')
+}
+
+fn is_escape_code_char(c: char) -> bool {
+    matches!(c, '\\' | 'n' | 't')
+}
+
+fn is_valid_char_literal(c: char) -> bool {
+    !matches!(c, '\'' | '\n')
 }
 
 #[cfg(test)]
@@ -280,7 +306,15 @@ mod tests {
 
     #[test]
     fn char_literals() {
-        // TODO
+        assert_token!("'x'", TokenType::CharLiteral, "'x'", 1, 3);
+        assert_token!(" ' ' ", TokenType::CharLiteral, "' '", 1, 4);
+        assert_token!("'\\n'", TokenType::CharLiteral, "'\\n'", 1, 4);
+        assert_token!("'\\t'", TokenType::CharLiteral, "'\\t'", 1, 4);
+        assert_error!("'\\j'", LexicalErrorKind::InvalidEscapeCode, "", 1, 2);
+        assert_error!("'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
+        assert_error!("''", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
+        assert_error!("'xy'", LexicalErrorKind::InvalidCharLiteral, "", 1, 2);
+        assert_error!("'\n'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
     }
 
     #[test]

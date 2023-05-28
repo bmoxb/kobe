@@ -46,6 +46,8 @@ impl fmt::Display for ErrorKind {
 pub enum LexicalErrorKind {
     UnexpectedCharacter(char),
     InvalidFloatLiteral,
+    InvalidCharLiteral,
+    InvalidEscapeCode,
 }
 
 impl fmt::Display for LexicalErrorKind {
@@ -55,6 +57,8 @@ impl fmt::Display for LexicalErrorKind {
                 write!(f, "unexpected character {c:?} in input")
             }
             LexicalErrorKind::InvalidFloatLiteral => write!(f, "invalid floating-point literal"),
+            LexicalErrorKind::InvalidCharLiteral => write!(f, "invalid character literal"),
+            LexicalErrorKind::InvalidEscapeCode => write!(f, "invalid escape code"),
         }
     }
 }
