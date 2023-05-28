@@ -2,35 +2,61 @@ use std::{fmt, path::PathBuf};
 
 #[derive(Debug, PartialEq)]
 pub struct Error {
-    line_number: usize,
-    char_number: usize,
-    line: String,
-    file_path: PathBuf,
-    kind: ErrorKind,
+    pub kind: ErrorKind,
+    pub line_number: usize,
+    pub char_number: usize,
+    pub line: String,
+    pub file_path: Option<PathBuf>,
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.kind {
-            ErrorKind::Lexical => writeln!(f, "Lexical error: ...")?,
-            ErrorKind::Syntax => writeln!(f, "Syntax error: ...")?,
-        }
+        writeln!(f, "{}", self.kind)?;
         writeln!(
             f,
             "> {}:{}:{}",
-            self.file_path.display(),
+            self.file_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or("stdin".to_string()),
             self.line_number,
             self.char_number
         )?;
         writeln!(f, "| {}", self.line)?;
-        writeln!(f, "| {}^", " ".repeat(self.char_number))
+        writeln!(f, "|{}^", " ".repeat(self.char_number))
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ErrorKind {
-    Lexical,
+    Lexical(LexicalErrorKind),
     Syntax,
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ErrorKind::Lexical(k) => write!(f, "Lexical error: {k}."),
+            ErrorKind::Syntax => write!(f, "Syntax error: ..."),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum LexicalErrorKind {
+    UnexpectedCharacter(char),
+    InvalidFloatLiteral,
+}
+
+impl fmt::Display for LexicalErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            LexicalErrorKind::UnexpectedCharacter(c) => {
+                write!(f, "unexpected character {c:?} in input")
+            }
+            LexicalErrorKind::InvalidFloatLiteral => write!(f, "invalid floating-point literal"),
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

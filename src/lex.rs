@@ -1,7 +1,7 @@
 use std::io::{BufReader, Read};
 
 use crate::{
-    error::Result,
+    error::{Error, ErrorKind, LexicalErrorKind, Result},
     token::{Token, TokenType},
 };
 
@@ -43,20 +43,20 @@ impl<R: Read> Lexer<R> {
     // If the peeked character is not equal then do not do the above and just
     // return `false`.
     fn next_char_if_equals(&mut self, lexeme: &mut String, target: char) -> bool {
-        self.next_char_if(lexeme, |c| c == target)
+        self.next_char_if(lexeme, |c| c == target).is_some()
     }
 
-    fn next_char_if(&mut self, lexeme: &mut String, f: impl Fn(char) -> bool) -> bool {
+    fn next_char_if(&mut self, lexeme: &mut String, f: impl Fn(char) -> bool) -> Option<char> {
         if let Some(c) = self.next_char_no_update() {
             if f(c) {
                 self.update_position_tracking(c);
                 lexeme.push(c);
-                return true;
+                return Some(c);
             } else {
                 self.peeked_char = Some(c);
             }
         }
-        false
+        None
     }
 
     fn next_char_no_update(&mut self) -> Option<char> {
@@ -77,6 +77,51 @@ impl<R: Read> Lexer<R> {
             self.char_number = 0;
         }
     }
+
+    fn handle_number_literal(&mut self, lexeme: &mut String) -> Result<TokenType> {
+        let mut tt = TokenType::IntLiteral;
+
+        while let Some(c) = self.next_char_if(lexeme, is_number_char) {
+            if c == '.' {
+                if tt == TokenType::IntLiteral {
+                    tt = TokenType::FloatLiteral;
+                } else {
+                    return Err(self.new_error(LexicalErrorKind::InvalidFloatLiteral));
+                }
+            }
+        }
+
+        Ok(tt)
+    }
+
+    fn handle_ident_or_keyword(&mut self, lexeme: &mut String) -> TokenType {
+        while self.next_char_if(lexeme, is_ident_char).is_some() {}
+
+        match lexeme.as_str() {
+            "do" => TokenType::DoKeyword,
+            "end" => TokenType::EndKeyword,
+            "for" => TokenType::ForKeyword,
+            "while" => TokenType::WhileKeyword,
+            "if" => TokenType::IfKeyword,
+            "then" => TokenType::ThenKeyword,
+            "else" => TokenType::ElseKeyword,
+            "fn" => TokenType::FnKeyword,
+            "return" => TokenType::ReturnKeyword,
+            "and" => TokenType::AndKeyword,
+            "or" => TokenType::OrKeyword,
+            _ => TokenType::Identifier,
+        }
+    }
+
+    fn new_error(&mut self, kind: LexicalErrorKind) -> Error {
+        Error {
+            kind: ErrorKind::Lexical(kind),
+            line: String::new(), // TODO
+            line_number: self.line_number,
+            char_number: self.char_number,
+            file_path: None, // TODO
+        }
+    }
 }
 
 impl<R: Read> Iterator for Lexer<R> {
@@ -88,60 +133,56 @@ impl<R: Read> Iterator for Lexer<R> {
         let c = self.next_char(&mut lexeme)?;
 
         let tok_type = match c {
-            '=' => {
-                if self.next_char_if_equals(&mut lexeme, '=') {
-                    TokenType::Equivalent
-                } else {
-                    TokenType::Assign
-                }
-            }
-            ':' => TokenType::Colon,
-            ',' => TokenType::Comma,
-            '(' => TokenType::OpenBracket,
-            ')' => TokenType::CloseBracket,
-            '[' => TokenType::OpenSquare,
-            ']' => TokenType::CloseSquare,
-            '+' => TokenType::Plus,
-            '-' => {
-                if self.next_char_if_equals(&mut lexeme, '>') {
-                    TokenType::Arrow
-                } else {
-                    TokenType::Minus
-                }
-            }
-            '*' => TokenType::Times,
-            '/' => TokenType::Divide,
-            '<' => {
-                if self.next_char_if_equals(&mut lexeme, '=') {
-                    TokenType::LessThanOrEqual
-                } else {
-                    TokenType::LessThan
-                }
-            }
-            '>' => {
-                if self.next_char_if_equals(&mut lexeme, '=') {
-                    TokenType::GreaterThanOrEqual
-                } else {
-                    TokenType::GreaterThan
-                }
-            }
-            '!' => {
-                if self.next_char_if_equals(&mut lexeme, '=') {
-                    TokenType::NotEquivalent
-                } else {
-                    TokenType::Not
-                }
-            }
-            '0'..='9' => unimplemented!(),
-            'a'..='z' | 'A'..='Z' | '_' => {
-                while self.next_char_if(&mut lexeme, is_ident_char) {}
-                choose_identifier_or_keyword_token_type(&lexeme)
-            }
-            c if c.is_whitespace() => return self.next(),
-            _ => unimplemented!(),
+            ':' => Ok(TokenType::Colon),
+            ',' => Ok(TokenType::Comma),
+            '(' => Ok(TokenType::OpenBracket),
+            ')' => Ok(TokenType::CloseBracket),
+            '[' => Ok(TokenType::OpenSquare),
+            ']' => Ok(TokenType::CloseSquare),
+            '+' => Ok(TokenType::Plus),
+            '*' => Ok(TokenType::Times),
+            '/' => Ok(TokenType::Divide),
+
+            '=' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::Equivalent
+            } else {
+                TokenType::Assign
+            }),
+
+            '-' => Ok(if self.next_char_if_equals(&mut lexeme, '>') {
+                TokenType::Arrow
+            } else {
+                TokenType::Minus
+            }),
+
+            '<' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::LessThanOrEqual
+            } else {
+                TokenType::LessThan
+            }),
+
+            '>' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::GreaterThanOrEqual
+            } else {
+                TokenType::GreaterThan
+            }),
+
+            '!' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::NotEquivalent
+            } else {
+                TokenType::Not
+            }),
+
+            '0'..='9' => self.handle_number_literal(&mut lexeme),
+
+            'a'..='z' | 'A'..='Z' | '_' => Ok(self.handle_ident_or_keyword(&mut lexeme)),
+
+            _ if c.is_whitespace() => return self.next(),
+
+            _ => Err(self.new_error(LexicalErrorKind::UnexpectedCharacter(c))),
         };
 
-        Some(Ok(Token {
+        Some(tok_type.map(|tok_type| Token {
             tok_type,
             lexeme,
             line_number: self.line_number,
@@ -154,21 +195,8 @@ fn is_ident_char(c: char) -> bool {
     matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')
 }
 
-fn choose_identifier_or_keyword_token_type(lexeme: &str) -> TokenType {
-    match lexeme {
-        "do" => TokenType::DoKeyword,
-        "end" => TokenType::EndKeyword,
-        "for" => TokenType::ForKeyword,
-        "while" => TokenType::WhileKeyword,
-        "if" => TokenType::IfKeyword,
-        "then" => TokenType::ThenKeyword,
-        "else" => TokenType::ElseKeyword,
-        "fn" => TokenType::FnKeyword,
-        "return" => TokenType::ReturnKeyword,
-        "and" => TokenType::AndKeyword,
-        "or" => TokenType::OrKeyword,
-        _ => TokenType::Identifier,
-    }
+fn is_number_char(c: char) -> bool {
+    matches!(c, '0'..='9' | '.')
 }
 
 #[cfg(test)]

@@ -17,7 +17,10 @@ impl<R: Read> Iterator for Parser<R> {
 
     fn next(&mut self) -> Option<Self::Item> {
         for token in &mut self.tokens {
-            println!("{:?}", token);
+            match token {
+                Ok(token) => println!("{}", token),
+                Err(e) => println!("{}", e),
+            }
         }
         unimplemented!()
     }
