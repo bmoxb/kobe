@@ -26,6 +26,7 @@ pub enum TokenType {
     Equivalent,
     NotEquivalent,
     Arrow,
+    Not,
     IntLiteral,
     FloatLiteral,
     CharLiteral,
@@ -42,5 +43,4 @@ pub enum TokenType {
     ReturnKeyword,
     AndKeyword,
     OrKeyword,
-    NotKeyword,
 }

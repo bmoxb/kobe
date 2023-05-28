@@ -1,4 +1,4 @@
-use std::io::{Read, Seek};
+use std::io::Read;
 
 use crate::{ast::Node, lex::Lexer};
 
@@ -12,7 +12,7 @@ impl<R> Parser<R> {
     }
 }
 
-impl<R: Read + Seek> Iterator for Parser<R> {
+impl<R: Read> Iterator for Parser<R> {
     type Item = Node;
 
     fn next(&mut self) -> Option<Self::Item> {

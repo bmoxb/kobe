@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Read};
 
 use crate::{
     error::Result,
@@ -11,7 +11,7 @@ pub struct Lexer<R> {
     char_number: usize,
 }
 
-impl<R: Read + Seek> Lexer<R> {
+impl<R: Read> Lexer<R> {
     pub fn new(input: R) -> Self {
         Lexer {
             reader: BufReader::new(input),
@@ -20,24 +20,27 @@ impl<R: Read + Seek> Lexer<R> {
         }
     }
 
-    fn next_char(&mut self) -> Option<char> {
-        let c = self.next_char_no_position_update();
+    fn next_char(&mut self, lexeme: &mut String) -> Option<char> {
+        let c = self.next_char_no_update();
         if let Some(c) = c {
             self.update_position_tracking(c);
+            lexeme.push(c);
         }
         c
     }
 
-    fn next_char_if_equals(&mut self, target: char) -> bool {
-        let c = self.next_char();
-        let equal = c == Some(target);
-        if !equal {
-            self.reader.seek_relative(-1).unwrap();
+    fn next_char_if_equals(&mut self, lexeme: &mut String, target: char) -> bool {
+        if let Some(c) = self.next_char_no_update() {
+            if c == target {
+                self.update_position_tracking(c);
+                lexeme.push(c);
+                return true;
+            }
         }
-        equal
+        false
     }
 
-    fn next_char_no_position_update(&mut self) -> Option<char> {
+    fn next_char_no_update(&mut self) -> Option<char> {
         let mut buf = [0];
         let bytes_read = self.reader.read(&mut buf).unwrap();
         let c = buf[0] as char;
@@ -53,15 +56,17 @@ impl<R: Read + Seek> Lexer<R> {
     }
 }
 
-impl<R: Read + Seek> Iterator for Lexer<R> {
+impl<R: Read> Iterator for Lexer<R> {
     type Item = Result<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let c = self.next_char()?;
+        let mut lexeme = String::new();
+
+        let c = self.next_char(&mut lexeme)?;
 
         let tok_type = match c {
             '=' => {
-                if self.next_char_if_equals('=') {
+                if self.next_char_if_equals(&mut lexeme, '=') {
                     TokenType::Equivalent
                 } else {
                     TokenType::Assign
@@ -75,7 +80,7 @@ impl<R: Read + Seek> Iterator for Lexer<R> {
             ']' => TokenType::CloseSquare,
             '+' => TokenType::Plus,
             '-' => {
-                if self.next_char_if_equals('>') {
+                if self.next_char_if_equals(&mut lexeme, '>') {
                     TokenType::Arrow
                 } else {
                     TokenType::Minus
@@ -84,17 +89,24 @@ impl<R: Read + Seek> Iterator for Lexer<R> {
             '*' => TokenType::Times,
             '/' => TokenType::Divide,
             '<' => {
-                if self.next_char_if_equals('=') {
+                if self.next_char_if_equals(&mut lexeme, '=') {
                     TokenType::LessThanOrEqual
                 } else {
                     TokenType::LessThan
                 }
             }
             '>' => {
-                if self.next_char_if_equals('=') {
+                if self.next_char_if_equals(&mut lexeme, '=') {
                     TokenType::GreaterThanOrEqual
                 } else {
                     TokenType::GreaterThan
+                }
+            }
+            '!' => {
+                if self.next_char_if_equals(&mut lexeme, '=') {
+                    TokenType::NotEquivalent
+                } else {
+                    TokenType::Not
                 }
             }
             '0'..='9' => unimplemented!(),
@@ -105,7 +117,7 @@ impl<R: Read + Seek> Iterator for Lexer<R> {
 
         Some(Ok(Token {
             tok_type,
-            lexeme: c.to_string(),
+            lexeme,
             line_number: self.line_number,
             char_number: self.char_number,
         }))
@@ -136,6 +148,25 @@ mod tests {
     #[test]
     fn simple_tokens() {
         assert_lex!("=", TokenType::Assign, "=", 1, 1);
+        assert_lex!("==", TokenType::Equivalent, "==", 1, 2);
+        assert_lex!(" :", TokenType::Colon, ":", 1, 2);
+        assert_lex!(", ", TokenType::Comma, ",", 1, 1);
+        assert_lex!("\n(", TokenType::OpenBracket, "(", 2, 1);
+        assert_lex!(")\n", TokenType::CloseBracket, ")", 1, 1);
+        assert_lex!(" [ ", TokenType::OpenSquare, "[", 1, 2);
+        assert_lex!(" ] ", TokenType::CloseSquare, "]", 1, 2);
+        assert_lex!("+", TokenType::Plus, "+", 1, 1);
+        assert_lex!("-", TokenType::Minus, "-", 1, 1);
+        assert_lex!("->", TokenType::Arrow, "->", 1, 2);
+        assert_lex!("-\t>", TokenType::Minus, "-", 1, 1);
+        assert_lex!("\t *", TokenType::Times, "*", 1, 3);
+        assert_lex!("/ \t", TokenType::Divide, "/", 1, 1);
+        assert_lex!("<", TokenType::LessThan, "<", 1, 1);
+        assert_lex!(" <= ", TokenType::LessThanOrEqual, "<=", 1, 3);
+        assert_lex!(">", TokenType::GreaterThan, ">", 1, 1);
+        assert_lex!(" >= ", TokenType::GreaterThanOrEqual, ">=", 1, 3);
+        assert_lex!("!", TokenType::Not, "!", 1, 1);
+        assert_lex!("!=", TokenType::NotEquivalent, "!=", 1, 2);
     }
 
     #[test]

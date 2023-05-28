@@ -1,4 +1,4 @@
-use std::io::{Read, Seek};
+use std::io::Read;
 
 use crate::{error::Result, parse::Parser};
 
@@ -6,7 +6,7 @@ pub struct CodeGenerator<R> {
     nodes: Parser<R>,
 }
 
-impl<R: Read + Seek> CodeGenerator<R> {
+impl<R: Read> CodeGenerator<R> {
     pub fn new(nodes: Parser<R>) -> Self {
         CodeGenerator { nodes }
     }

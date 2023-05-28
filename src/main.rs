@@ -7,7 +7,7 @@ mod token;
 
 use std::{
     fs::File,
-    io::{self, Cursor, Read, Seek, Write},
+    io::{self, Read, Write},
     path::PathBuf,
 };
 
@@ -17,12 +17,9 @@ fn main() {
     let args = Args::parse();
 
     let wasm = if let Some(infile) = args.infile {
-        let f = File::open(infile).unwrap();
-        compile(f)
+        compile(File::open(infile).unwrap())
     } else {
-        let mut line = String::new();
-        io::stdin().read_line(&mut line).unwrap();
-        compile(Cursor::new(line))
+        compile(io::stdin())
     };
 
     if let Some(outfile) = args.outfile {
@@ -33,7 +30,7 @@ fn main() {
     }
 }
 
-fn compile(input: impl Read + Seek) -> Vec<u8> {
+fn compile(input: impl Read) -> Vec<u8> {
     let lexer = lex::Lexer::new(input);
     let parser = parse::Parser::new(lexer);
     let generator = codegen::CodeGenerator::new(parser);
