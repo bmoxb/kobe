@@ -205,13 +205,13 @@ mod tests {
 
     use super::*;
 
-    macro_rules! assert_lex {
-        ($input:literal, $type:expr, $lexeme:literal, $line:literal, $char:literal) => {
+    macro_rules! assert_token {
+        ($input:literal, $type:expr, $lexeme:literal, $line_no:literal, $char_no:literal) => {
             let expected = Token {
                 tok_type: $type,
                 lexeme: $lexeme.to_string(),
-                line_number: $line,
-                char_number: $char,
+                line_number: $line_no,
+                char_number: $char_no,
             };
 
             let cursor = Cursor::new($input);
@@ -220,41 +220,62 @@ mod tests {
         };
     }
 
+    macro_rules! assert_error {
+        ($input:literal, $kind:expr, $line:literal, $line_no:literal, $char_no:literal) => {
+            let error = Error {
+                kind: ErrorKind::Lexical($kind),
+                line_number: $line_no,
+                char_number: $char_no,
+                line: $line.to_string(),
+                file_path: None,
+            };
+
+            let cursor = Cursor::new($input);
+            let mut l = Lexer::new(cursor);
+            assert_eq!(l.next(), Some(Err(error)));
+        };
+    }
+
     #[test]
     fn simple_tokens() {
-        assert_lex!("=", TokenType::Assign, "=", 1, 1);
-        assert_lex!("==", TokenType::Equivalent, "==", 1, 2);
-        assert_lex!(" :", TokenType::Colon, ":", 1, 2);
-        assert_lex!(", ", TokenType::Comma, ",", 1, 1);
-        assert_lex!("\n(", TokenType::OpenBracket, "(", 2, 1);
-        assert_lex!(")\n", TokenType::CloseBracket, ")", 1, 1);
-        assert_lex!(" [ ", TokenType::OpenSquare, "[", 1, 2);
-        assert_lex!(" ] ", TokenType::CloseSquare, "]", 1, 2);
-        assert_lex!("+", TokenType::Plus, "+", 1, 1);
-        assert_lex!("-", TokenType::Minus, "-", 1, 1);
-        assert_lex!("->", TokenType::Arrow, "->", 1, 2);
-        assert_lex!("-\t>", TokenType::Minus, "-", 1, 1);
-        assert_lex!("\t *", TokenType::Times, "*", 1, 3);
-        assert_lex!("/ \t", TokenType::Divide, "/", 1, 1);
-        assert_lex!("<", TokenType::LessThan, "<", 1, 1);
-        assert_lex!(" <= ", TokenType::LessThanOrEqual, "<=", 1, 3);
-        assert_lex!(">", TokenType::GreaterThan, ">", 1, 1);
-        assert_lex!(" >= ", TokenType::GreaterThanOrEqual, ">=", 1, 3);
-        assert_lex!("!", TokenType::Not, "!", 1, 1);
-        assert_lex!("!=", TokenType::NotEquivalent, "!=", 1, 2);
+        assert_token!("=", TokenType::Assign, "=", 1, 1);
+        assert_token!("==", TokenType::Equivalent, "==", 1, 2);
+        assert_token!(" :", TokenType::Colon, ":", 1, 2);
+        assert_token!(", ", TokenType::Comma, ",", 1, 1);
+        assert_token!("\n(", TokenType::OpenBracket, "(", 2, 1);
+        assert_token!(")\n", TokenType::CloseBracket, ")", 1, 1);
+        assert_token!(" [ ", TokenType::OpenSquare, "[", 1, 2);
+        assert_token!(" ] ", TokenType::CloseSquare, "]", 1, 2);
+        assert_token!("+", TokenType::Plus, "+", 1, 1);
+        assert_token!("-", TokenType::Minus, "-", 1, 1);
+        assert_token!("->", TokenType::Arrow, "->", 1, 2);
+        assert_token!("-\t>", TokenType::Minus, "-", 1, 1);
+        assert_token!("\t *", TokenType::Times, "*", 1, 3);
+        assert_token!("/ \t", TokenType::Divide, "/", 1, 1);
+        assert_token!("<", TokenType::LessThan, "<", 1, 1);
+        assert_token!(" <= ", TokenType::LessThanOrEqual, "<=", 1, 3);
+        assert_token!(">", TokenType::GreaterThan, ">", 1, 1);
+        assert_token!(" >= ", TokenType::GreaterThanOrEqual, ">=", 1, 3);
+        assert_token!("!", TokenType::Not, "!", 1, 1);
+        assert_token!("!=", TokenType::NotEquivalent, "!=", 1, 2);
     }
 
     #[test]
     fn identifiers_and_keywords() {
-        assert_lex!("a", TokenType::Identifier, "a", 1, 1);
-        assert_lex!("_", TokenType::Identifier, "_", 1, 1);
-        assert_lex!(" ABC_123 ", TokenType::Identifier, "ABC_123", 1, 8);
-        assert_lex!("\nif", TokenType::IfKeyword, "if", 2, 2);
+        assert_token!("a", TokenType::Identifier, "a", 1, 1);
+        assert_token!("_", TokenType::Identifier, "_", 1, 1);
+        assert_token!(" ABC_123 ", TokenType::Identifier, "ABC_123", 1, 8);
+        assert_token!("\nif", TokenType::IfKeyword, "if", 2, 2);
     }
 
     #[test]
     fn number_literals() {
-        // TODO
+        assert_token!("0", TokenType::IntLiteral, "0", 1, 1);
+        assert_token!("1234", TokenType::IntLiteral, "1234", 1, 4);
+        assert_token!("1.\n", TokenType::FloatLiteral, "1.", 1, 2);
+        assert_token!(" 123.456 ", TokenType::FloatLiteral, "123.456", 1, 8);
+        assert_error!(".", LexicalErrorKind::UnexpectedCharacter('.'), "", 1, 1);
+        assert_error!("1.2.3", LexicalErrorKind::InvalidFloatLiteral, "", 1, 4);
     }
 
     #[test]
