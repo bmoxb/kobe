@@ -11,34 +11,62 @@ use std::{
     path::PathBuf,
 };
 
-use clap::Parser;
+use codegen::CodeGenerator;
+use error::Result;
+use lex::Lexer;
+use parse::Parser;
+
+use clap::Parser as ClapParser;
 
 fn main() {
     let args = Args::parse();
 
-    let wasm = if let Some(infile) = args.infile {
-        compile(File::open(infile).unwrap())
+    if let Some(wasm) = compile_input(&args.infile) {
+        write_output(&args.outfile, wasm);
+    }
+}
+
+fn compile_input(infile: &Option<PathBuf>) -> Option<Vec<u8>> {
+    let result = if let Some(infile) = infile {
+        match File::open(infile) {
+            Ok(file) => perform_compilation_steps(file),
+            Err(e) => {
+                eprintln!("Could not read input file {}: {}", infile.display(), e);
+                return None;
+            }
+        }
     } else {
-        compile(io::stdin())
+        perform_compilation_steps(io::stdin())
     };
 
-    if let Some(outfile) = args.outfile {
-        let mut f = File::create(outfile).unwrap();
-        f.write_all(&wasm).unwrap();
+    if let Err(e) = &result {
+        eprintln!("{e}");
+    }
+
+    result.ok()
+}
+
+fn write_output(outfile: &Option<PathBuf>, wasm: Vec<u8>) {
+    if let Some(outfile) = outfile {
+        let result = File::create(outfile).and_then(|mut f| f.write_all(&wasm));
+
+        if let Err(e) = result {
+            eprintln!("Could not write output file {}: {}", outfile.display(), e);
+        }
     } else {
         println!("{:?}", wasm);
     }
 }
 
-fn compile(input: impl Read) -> Vec<u8> {
-    let lexer = lex::Lexer::new(input);
-    let parser = parse::Parser::new(lexer);
-    let generator = codegen::CodeGenerator::new(parser);
-    generator.generate_wasm().unwrap()
+fn perform_compilation_steps(input: impl Read) -> Result<Vec<u8>> {
+    let lexer = Lexer::new(input);
+    let parser = Parser::new(lexer);
+    let generator = CodeGenerator::new(parser);
+    generator.generate_wasm()
     // TODO: Optimise with wasm-opt?
 }
 
-#[derive(Parser)]
+#[derive(ClapParser)]
 struct Args {
     infile: Option<PathBuf>,
     outfile: Option<PathBuf>,
