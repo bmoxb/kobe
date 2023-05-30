@@ -114,19 +114,46 @@ impl<R: Read> Lexer<R> {
     }
 
     fn handle_char_literal(&mut self, lexeme: &mut String) -> Result<TokenType> {
-        if self.next_char_if_equals(lexeme, '\\') {
-            if self.next_char_if(lexeme, is_escape_code_char).is_none() {
-                return Err(self.new_error(LexicalErrorKind::InvalidEscapeCode));
-            }
-        } else if self.next_char_if(lexeme, is_valid_char_literal).is_none() {
-            return Err(self.new_error(LexicalErrorKind::InvalidCharLiteral));
-        }
+        self.handle_character_in_literal(lexeme, LexicalErrorKind::InvalidCharLiteral, |c| {
+            !matches!(c, '\'' | '\n')
+        })?;
 
         if self.next_char_if_equals(lexeme, '\'') {
             Ok(TokenType::CharLiteral)
         } else {
             Err(self.new_error(LexicalErrorKind::InvalidCharLiteral))
         }
+    }
+
+    fn handle_string_literal(&mut self, lexeme: &mut String) -> Result<TokenType> {
+        while !self.next_char_if_equals(lexeme, '"') {
+            self.handle_character_in_literal(
+                lexeme,
+                LexicalErrorKind::InvalidStringLiteral,
+                |_| true,
+            )?;
+        }
+
+        Ok(TokenType::StringLiteral)
+    }
+
+    fn handle_character_in_literal(
+        &mut self,
+        lexeme: &mut String,
+        invalid_literal_error: LexicalErrorKind,
+        is_valid_character_in_literal: impl Fn(char) -> bool,
+    ) -> Result<()> {
+        if self.next_char_if_equals(lexeme, '\\') {
+            if self.next_char_if(lexeme, is_escape_code_char).is_none() {
+                return Err(self.new_error(LexicalErrorKind::InvalidEscapeCode));
+            }
+        } else if self
+            .next_char_if(lexeme, is_valid_character_in_literal)
+            .is_none()
+        {
+            return Err(self.new_error(invalid_literal_error));
+        }
+        Ok(())
     }
 
     fn new_error(&mut self, kind: LexicalErrorKind) -> Error {
@@ -158,6 +185,15 @@ impl<R: Read> Iterator for Lexer<R> {
             '+' => Ok(TokenType::Plus),
             '*' => Ok(TokenType::Times),
             '/' => Ok(TokenType::Divide),
+            ';' | '\n' => {
+                // consume as many ';' and '\n' as possible as producing
+                // separate tokens for each is pointless
+                while self
+                    .next_char_if(&mut lexeme, |c| c == ';' || c == '\n')
+                    .is_some()
+                {}
+                Ok(TokenType::EndStatement)
+            }
 
             '=' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
                 TokenType::Equivalent
@@ -195,6 +231,8 @@ impl<R: Read> Iterator for Lexer<R> {
 
             '\'' => self.handle_char_literal(&mut lexeme),
 
+            '"' => self.handle_string_literal(&mut lexeme),
+
             _ if c.is_whitespace() => return self.next(),
 
             _ => Err(self.new_error(LexicalErrorKind::UnexpectedCharacter)),
@@ -218,11 +256,7 @@ fn is_number_char(c: char) -> bool {
 }
 
 fn is_escape_code_char(c: char) -> bool {
-    matches!(c, '\\' | 'n' | 't' | '\'' | '0')
-}
-
-fn is_valid_char_literal(c: char) -> bool {
-    !matches!(c, '\'' | '\n')
+    matches!(c, '\\' | 'n' | 't' | '\'' | '"' | '0')
 }
 
 #[cfg(test)]
@@ -263,13 +297,57 @@ mod tests {
     }
 
     #[test]
+    fn sequence_of_tokens() {
+        let input = "if (x + 2) / 3 >= foo then\nfunc(abc5, 2.5)\nend";
+
+        let expected_tokens = [
+            (TokenType::IfKeyword, "if", 1, 2),
+            (TokenType::OpenBracket, "(", 1, 4),
+            (TokenType::Identifier, "x", 1, 5),
+            (TokenType::Plus, "+", 1, 7),
+            (TokenType::IntLiteral, "2", 1, 9),
+            (TokenType::CloseBracket, ")", 1, 10),
+            (TokenType::Divide, "/", 1, 12),
+            (TokenType::IntLiteral, "3", 1, 14),
+            (TokenType::GreaterThanOrEqual, ">=", 1, 17),
+            (TokenType::Identifier, "foo", 1, 21),
+            (TokenType::ThenKeyword, "then", 1, 26),
+            (TokenType::EndStatement, "\n", 2, 0),
+            (TokenType::Identifier, "func", 2, 4),
+            (TokenType::OpenBracket, "(", 2, 5),
+            (TokenType::Identifier, "abc5", 2, 9),
+            (TokenType::Comma, ",", 2, 10),
+            (TokenType::FloatLiteral, "2.5", 2, 14),
+            (TokenType::CloseBracket, ")", 2, 15),
+            (TokenType::EndStatement, "\n", 3, 0),
+            (TokenType::EndKeyword, "end", 3, 3),
+        ];
+
+        let cursor = Cursor::new(input);
+        let mut lexer = Lexer::new(cursor);
+
+        for (tok_type, lexeme, line_number, char_number) in expected_tokens {
+            let expected_token = Token {
+                tok_type,
+                lexeme: lexeme.to_string(),
+                line_number,
+                char_number,
+            };
+
+            assert_eq!(lexer.next(), Some(Ok(expected_token)));
+        }
+
+        assert!(lexer.next().is_none());
+    }
+
+    #[test]
     fn simple_tokens() {
         assert_token!("=", TokenType::Assign, "=", 1, 1);
         assert_token!("==", TokenType::Equivalent, "==", 1, 2);
         assert_token!(" :", TokenType::Colon, ":", 1, 2);
         assert_token!(", ", TokenType::Comma, ",", 1, 1);
-        assert_token!("\n(", TokenType::OpenBracket, "(", 2, 1);
-        assert_token!(")\n", TokenType::CloseBracket, ")", 1, 1);
+        assert_token!("\t(", TokenType::OpenBracket, "(", 1, 2);
+        assert_token!(")\t", TokenType::CloseBracket, ")", 1, 1);
         assert_token!(" [ ", TokenType::OpenSquare, "[", 1, 2);
         assert_token!(" ] ", TokenType::CloseSquare, "]", 1, 2);
         assert_token!("+", TokenType::Plus, "+", 1, 1);
@@ -291,7 +369,7 @@ mod tests {
         assert_token!("a", TokenType::Identifier, "a", 1, 1);
         assert_token!("_", TokenType::Identifier, "_", 1, 1);
         assert_token!(" ABC_123 ", TokenType::Identifier, "ABC_123", 1, 8);
-        assert_token!("\nif", TokenType::IfKeyword, "if", 2, 2);
+        assert_token!("\tif", TokenType::IfKeyword, "if", 1, 3);
     }
 
     #[test]
@@ -310,15 +388,26 @@ mod tests {
         assert_token!(" ' ' ", TokenType::CharLiteral, "' '", 1, 4);
         assert_token!("'\\n'", TokenType::CharLiteral, "'\\n'", 1, 4);
         assert_token!("'\\t'", TokenType::CharLiteral, "'\\t'", 1, 4);
+        assert_token!("'\\''", TokenType::CharLiteral, "'\\''", 1, 4);
+        assert_token!("'\"'", TokenType::CharLiteral, "'\"'", 1, 3);
         assert_error!("'\\j'", LexicalErrorKind::InvalidEscapeCode, "", 1, 2);
         assert_error!("'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
         assert_error!("''", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
+        assert_error!("'''", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
         assert_error!("'xy'", LexicalErrorKind::InvalidCharLiteral, "", 1, 2);
         assert_error!("'\n'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
     }
 
     #[test]
     fn string_literals() {
-        // TODO
+        assert_token!("\"\"", TokenType::StringLiteral, "\"\"", 1, 2);
+        assert_token!("\"abc def\"", TokenType::StringLiteral, "\"abc def\"", 1, 9);
+        assert_token!("\" \\\" \"", TokenType::StringLiteral, "\" \\\" \"", 1, 6);
+    }
+
+    #[test]
+    fn end_statement() {
+        assert_token!("\n\n\n", TokenType::EndStatement, "\n\n\n", 4, 0);
+        assert_token!(" ;\n", TokenType::EndStatement, ";\n", 2, 0);
     }
 }
