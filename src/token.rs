@@ -59,5 +59,6 @@ pub enum TokenType {
     ReturnKeyword,
     AndKeyword,
     OrKeyword,
+    LetKeyword,
     EndStatement, // ';' or '\n'
 }

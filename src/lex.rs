@@ -120,6 +120,7 @@ impl<R: Read> Lexer<R> {
             "return" => TokenType::ReturnKeyword,
             "and" => TokenType::AndKeyword,
             "or" => TokenType::OrKeyword,
+            "let" => TokenType::LetKeyword,
             _ => TokenType::Identifier,
         }
     }
