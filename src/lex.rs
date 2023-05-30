@@ -5,6 +5,8 @@ use crate::{
     token::{Token, TokenType},
 };
 
+/// The Kobe lexer. Takes an input stream (anything [`Read`]) and lazily produces
+/// tokens through its implementation of [`Iterator`].
 pub struct Lexer<R> {
     reader: BufReader<R>,
     input_source_name: String,
@@ -26,10 +28,9 @@ impl<R: Read> Lexer<R> {
         }
     }
 
-    // Read the next character from the buffer. Will return `None` if reached
-    // the end of the file or input stream. This function will track the
-    // position (line and character numbers) in the input. The read character
-    // will be appened to the provide lexeme string also.
+    /// Read the next character from the buffer. Will return `None` if reached
+    /// the end of input stream. This function will track the position (line and
+    /// character numbers) in the input.
     fn next_char(&mut self, lexeme: &mut String) -> Option<char> {
         let c = self.next_char_no_position_tracking();
         if let Some(c) = c {
@@ -39,17 +40,14 @@ impl<R: Read> Lexer<R> {
         c
     }
 
-    // Peek the next character in the input and, if it is equal to the given
-    // target character, do the following:
-    // * Track position (line and character numbers) in the input.
-    // * Append the character to the given lexeme.
-    // * Return `true`.
-    // If the peeked character is not equal then do not do the above and just
-    // return `false`.
+    /// Peek the next character in the input and, if it is equal to the given
+    /// target character, comsume it like [`next_char]`
     fn next_char_if_equals(&mut self, lexeme: &mut String, target: char) -> bool {
         self.next_char_if(lexeme, |c| c == target).is_some()
     }
 
+    /// Peek the next character and consume it if the given predicate function
+    /// returns `true`.
     fn next_char_if(&mut self, lexeme: &mut String, f: impl Fn(char) -> bool) -> Option<char> {
         if let Some(c) = self.next_char_no_position_tracking() {
             if f(c) {
@@ -198,16 +196,41 @@ impl<R: Read> Iterator for Lexer<R> {
             ')' => Ok(TokenType::CloseBracket),
             '[' => Ok(TokenType::OpenSquare),
             ']' => Ok(TokenType::CloseSquare),
-            '+' => Ok(TokenType::Plus),
-            '*' => Ok(TokenType::Times),
-            '/' => Ok(TokenType::Divide),
+
+            '+' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::PlusAssign
+            } else {
+                TokenType::Plus
+            }),
+
+            '*' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::TimesAssign
+            } else {
+                TokenType::Times
+            }),
+
+            '/' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::DivideAssign
+            } else {
+                TokenType::Divide
+            }),
+
+            '-' => Ok(if self.next_char_if_equals(&mut lexeme, '>') {
+                TokenType::Arrow
+            } else if self.next_char_if_equals(&mut lexeme, '=') {
+                TokenType::MinusAssign
+            } else {
+                TokenType::Minus
+            }),
+
             ';' | '\n' => {
                 // consume as many ';' and '\n' as possible as producing
-                // separate tokens for each is pointless
+                // separate tokens for each individually is pointless
                 while self
                     .next_char_if(&mut lexeme, |c| c == ';' || c == '\n')
                     .is_some()
                 {}
+
                 Ok(TokenType::EndStatement)
             }
 
@@ -215,12 +238,6 @@ impl<R: Read> Iterator for Lexer<R> {
                 TokenType::Equivalent
             } else {
                 TokenType::Assign
-            }),
-
-            '-' => Ok(if self.next_char_if_equals(&mut lexeme, '>') {
-                TokenType::Arrow
-            } else {
-                TokenType::Minus
             }),
 
             '<' => Ok(if self.next_char_if_equals(&mut lexeme, '=') {
@@ -370,11 +387,15 @@ mod tests {
         assert_token!(" [ ", TokenType::OpenSquare, "[", 1, 2);
         assert_token!(" ] ", TokenType::CloseSquare, "]", 1, 2);
         assert_token!("+", TokenType::Plus, "+", 1, 1);
+        assert_token!("\t+=", TokenType::PlusAssign, "+=", 1, 3);
         assert_token!("-", TokenType::Minus, "-", 1, 1);
+        assert_token!("-=\t", TokenType::MinusAssign, "-=", 1, 2);
         assert_token!("->", TokenType::Arrow, "->", 1, 2);
         assert_token!("-\t>", TokenType::Minus, "-", 1, 1);
         assert_token!("\t *", TokenType::Times, "*", 1, 3);
+        assert_token!("*=", TokenType::TimesAssign, "*=", 1, 2);
         assert_token!("/ \t", TokenType::Divide, "/", 1, 1);
+        assert_token!("/=", TokenType::DivideAssign, "/=", 1, 2);
         assert_token!("<", TokenType::LessThan, "<", 1, 1);
         assert_token!(" <= ", TokenType::LessThanOrEqual, "<=", 1, 3);
         assert_token!(">", TokenType::GreaterThan, ">", 1, 1);
