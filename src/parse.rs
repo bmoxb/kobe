@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::{ast::Node, lex::Lexer};
+use crate::{ast, lex::Lexer};
 
 pub struct Parser<R> {
     tokens: Lexer<R>,
@@ -13,7 +13,7 @@ impl<R> Parser<R> {
 }
 
 impl<R: Read> Iterator for Parser<R> {
-    type Item = Node;
+    type Item = ast::Stat;
 
     fn next(&mut self) -> Option<Self::Item> {
         for token in &mut self.tokens {
