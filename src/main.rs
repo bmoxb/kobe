@@ -29,14 +29,14 @@ fn main() {
 fn compile_input(infile: &Option<PathBuf>) -> Option<Vec<u8>> {
     let result = if let Some(infile) = infile {
         match File::open(infile) {
-            Ok(file) => perform_compilation_steps(file),
+            Ok(file) => perform_compilation_steps(file, infile.to_string_lossy().into_owned()),
             Err(e) => {
                 eprintln!("Could not read input file {}: {}", infile.display(), e);
                 return None;
             }
         }
     } else {
-        perform_compilation_steps(io::stdin())
+        perform_compilation_steps(io::stdin(), "stdin".to_string())
     };
 
     if let Err(e) = &result {
@@ -58,8 +58,8 @@ fn write_output(outfile: &Option<PathBuf>, wasm: Vec<u8>) {
     }
 }
 
-fn perform_compilation_steps(input: impl Read) -> Result<Vec<u8>> {
-    let lexer = Lexer::new(input);
+fn perform_compilation_steps(input: impl Read, name: String) -> Result<Vec<u8>> {
+    let lexer = Lexer::new(input, name);
     let parser = Parser::new(lexer);
     let generator = CodeGenerator::new(parser);
     generator.generate_wasm()

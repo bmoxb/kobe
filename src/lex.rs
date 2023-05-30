@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader, Read};
 
 use crate::{
     error::{Error, ErrorKind, LexicalErrorKind, Result},
@@ -7,18 +7,22 @@ use crate::{
 
 pub struct Lexer<R> {
     reader: BufReader<R>,
+    input_source_name: String,
     line_number: usize,
     char_number: usize,
     peeked_char: Option<char>,
+    line_read_so_far: String,
 }
 
 impl<R: Read> Lexer<R> {
-    pub fn new(input: R) -> Self {
+    pub fn new(input: R, input_source_name: String) -> Self {
         Lexer {
             reader: BufReader::new(input),
+            input_source_name,
             line_number: 1,
             char_number: 0,
             peeked_char: None,
+            line_read_so_far: String::new(),
         }
     }
 
@@ -27,7 +31,7 @@ impl<R: Read> Lexer<R> {
     // position (line and character numbers) in the input. The read character
     // will be appened to the provide lexeme string also.
     fn next_char(&mut self, lexeme: &mut String) -> Option<char> {
-        let c = self.next_char_no_update();
+        let c = self.next_char_no_position_tracking();
         if let Some(c) = c {
             self.update_position_tracking(c);
             lexeme.push(c);
@@ -47,7 +51,7 @@ impl<R: Read> Lexer<R> {
     }
 
     fn next_char_if(&mut self, lexeme: &mut String, f: impl Fn(char) -> bool) -> Option<char> {
-        if let Some(c) = self.next_char_no_update() {
+        if let Some(c) = self.next_char_no_position_tracking() {
             if f(c) {
                 self.update_position_tracking(c);
                 lexeme.push(c);
@@ -59,14 +63,22 @@ impl<R: Read> Lexer<R> {
         None
     }
 
-    fn next_char_no_update(&mut self) -> Option<char> {
+    fn next_char_no_position_tracking(&mut self) -> Option<char> {
         if self.peeked_char.is_some() {
             self.peeked_char.take()
         } else {
             let mut buf = [0];
             let bytes_read = self.reader.read(&mut buf).unwrap();
             let c = buf[0] as char;
-            (bytes_read > 0).then_some(c)
+
+            (bytes_read > 0).then(|| {
+                self.line_read_so_far.push(c);
+                if c == '\n' {
+                    self.line_read_so_far.clear();
+                }
+
+                c
+            })
         }
     }
 
@@ -75,6 +87,7 @@ impl<R: Read> Lexer<R> {
         if c == '\n' {
             self.line_number += 1;
             self.char_number = 0;
+            self.line_read_so_far.clear();
         }
     }
 
@@ -157,12 +170,15 @@ impl<R: Read> Lexer<R> {
     }
 
     fn new_error(&mut self, kind: LexicalErrorKind) -> Error {
+        // get remainder of the current line
+        let _ = self.reader.read_line(&mut self.line_read_so_far);
+
         Error {
             kind: ErrorKind::Lexical(kind),
-            line: String::new(), // TODO
             line_number: self.line_number,
             char_number: self.char_number,
-            file_path: None, // TODO
+            line: self.line_read_so_far.trim_end().to_string(),
+            input_source_name: self.input_source_name.clone(),
         }
     }
 }
@@ -275,23 +291,26 @@ mod tests {
             };
 
             let cursor = Cursor::new($input);
-            let mut l = Lexer::new(cursor);
+            let mut l = Lexer::new(cursor, "test".to_string());
             assert_eq!(l.next(), Some(Ok(expected)));
         };
     }
 
     macro_rules! assert_error {
-        ($input:literal, $kind:expr, $line:literal, $line_no:literal, $char_no:literal) => {
+        ($input:literal, $kind:expr, $line_no:literal, $char_no:literal) => {
+            assert_error!($input, $kind, $line_no, $char_no, $input.trim_end())
+        };
+        ($input:literal, $kind:expr, $line_no:literal, $char_no:literal, $error_line:expr) => {
             let error = Error {
                 kind: ErrorKind::Lexical($kind),
                 line_number: $line_no,
                 char_number: $char_no,
-                line: $line.to_string(),
-                file_path: None,
+                line: $error_line.to_string(),
+                input_source_name: "test".to_string(),
             };
 
             let cursor = Cursor::new($input);
-            let mut l = Lexer::new(cursor);
+            let mut l = Lexer::new(cursor, "test".to_string());
             assert_eq!(l.next(), Some(Err(error)));
         };
     }
@@ -324,7 +343,7 @@ mod tests {
         ];
 
         let cursor = Cursor::new(input);
-        let mut lexer = Lexer::new(cursor);
+        let mut lexer = Lexer::new(cursor, "test".to_string());
 
         for (tok_type, lexeme, line_number, char_number) in expected_tokens {
             let expected_token = Token {
@@ -378,8 +397,8 @@ mod tests {
         assert_token!("1234", TokenType::IntLiteral, "1234", 1, 4);
         assert_token!("1.\n", TokenType::FloatLiteral, "1.", 1, 2);
         assert_token!(" 123.456 ", TokenType::FloatLiteral, "123.456", 1, 8);
-        assert_error!(".", LexicalErrorKind::UnexpectedCharacter, "", 1, 1);
-        assert_error!("1.2.3", LexicalErrorKind::InvalidFloatLiteral, "", 1, 4);
+        assert_error!(".", LexicalErrorKind::UnexpectedCharacter, 1, 1);
+        assert_error!("1.2.3", LexicalErrorKind::InvalidFloatLiteral, 1, 4);
     }
 
     #[test]
@@ -390,12 +409,12 @@ mod tests {
         assert_token!("'\\t'", TokenType::CharLiteral, "'\\t'", 1, 4);
         assert_token!("'\\''", TokenType::CharLiteral, "'\\''", 1, 4);
         assert_token!("'\"'", TokenType::CharLiteral, "'\"'", 1, 3);
-        assert_error!("'\\j'", LexicalErrorKind::InvalidEscapeCode, "", 1, 2);
-        assert_error!("'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
-        assert_error!("''", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
-        assert_error!("'''", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
-        assert_error!("'xy'", LexicalErrorKind::InvalidCharLiteral, "", 1, 2);
-        assert_error!("'\n'", LexicalErrorKind::InvalidCharLiteral, "", 1, 1);
+        assert_error!("'\\j'", LexicalErrorKind::InvalidEscapeCode, 1, 2);
+        assert_error!("'", LexicalErrorKind::InvalidCharLiteral, 1, 1);
+        assert_error!("''", LexicalErrorKind::InvalidCharLiteral, 1, 1);
+        assert_error!("'''", LexicalErrorKind::InvalidCharLiteral, 1, 1);
+        assert_error!("'xy'", LexicalErrorKind::InvalidCharLiteral, 1, 2);
+        assert_error!("'\n'", LexicalErrorKind::InvalidCharLiteral, 1, 1, "'");
     }
 
     #[test]

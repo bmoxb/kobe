@@ -19,7 +19,10 @@ impl<R: Read> Iterator for Parser<R> {
         for token in &mut self.tokens {
             match token {
                 Ok(token) => println!("{}", token),
-                Err(e) => println!("{}", e),
+                Err(e) => {
+                    println!("{}", e);
+                    break;
+                }
             }
         }
         unimplemented!()

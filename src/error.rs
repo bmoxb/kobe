@@ -1,4 +1,4 @@
-use std::{fmt, path::PathBuf};
+use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub struct Error {
@@ -6,7 +6,7 @@ pub struct Error {
     pub line_number: usize,
     pub char_number: usize,
     pub line: String,
-    pub file_path: Option<PathBuf>,
+    pub input_source_name: String,
 }
 
 impl fmt::Display for Error {
@@ -15,12 +15,7 @@ impl fmt::Display for Error {
         writeln!(
             f,
             "> {}:{}:{}",
-            self.file_path
-                .as_ref()
-                .map(|p| p.display().to_string())
-                .unwrap_or("stdin".to_string()),
-            self.line_number,
-            self.char_number
+            self.input_source_name, self.line_number, self.char_number
         )?;
         writeln!(f, "| {}", self.line)?;
         writeln!(f, "|{}^", " ".repeat(self.char_number))
