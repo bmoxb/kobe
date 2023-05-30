@@ -26,12 +26,12 @@ fn main() {
     }
 }
 
-fn compile_input(infile: &Option<PathBuf>) -> Option<Vec<u8>> {
-    let result = if let Some(infile) = infile {
-        match File::open(infile) {
-            Ok(file) => perform_compilation_steps(file, infile.to_string_lossy().into_owned()),
+fn compile_input(maybe_path: &Option<PathBuf>) -> Option<Vec<u8>> {
+    let result = if let Some(path) = maybe_path {
+        match File::open(path) {
+            Ok(file) => perform_compilation_steps(file, path.to_string_lossy().into_owned()),
             Err(e) => {
-                eprintln!("Could not read input file {}: {}", infile.display(), e);
+                eprintln!("Could not read input file {}: {}", path.display(), e);
                 return None;
             }
         }
@@ -46,12 +46,12 @@ fn compile_input(infile: &Option<PathBuf>) -> Option<Vec<u8>> {
     result.ok()
 }
 
-fn write_output(outfile: &Option<PathBuf>, wasm: Vec<u8>) {
-    if let Some(outfile) = outfile {
-        let result = File::create(outfile).and_then(|mut f| f.write_all(&wasm));
+fn write_output(maybe_path: &Option<PathBuf>, wasm: Vec<u8>) {
+    if let Some(path) = maybe_path {
+        let result = File::create(path).and_then(|mut f| f.write_all(&wasm));
 
         if let Err(e) = result {
-            eprintln!("Could not write output file {}: {}", outfile.display(), e);
+            eprintln!("Could not write output file {}: {}", path.display(), e);
         }
     } else {
         println!("{:?}", wasm);
@@ -68,6 +68,8 @@ fn perform_compilation_steps(input: impl Read, name: String) -> Result<Vec<u8>> 
 
 #[derive(ClapParser)]
 struct Args {
+    /// Input Kobe source file path
     infile: Option<PathBuf>,
+    /// Output WASM file path
     outfile: Option<PathBuf>,
 }
