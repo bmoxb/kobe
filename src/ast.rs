@@ -1,20 +1,22 @@
 #[derive(Debug)]
 pub enum Stat {
+    Function(Name, Vec<(Name, Type)>, Option<Type>, Vec<Stat>),
     Expr(Expr),
-    Let(String, String, Expr),
-    Assign(String, Expr),
-    PlusAssign(String, Expr),
-    SubAssign(String, Expr),
-    MulAssign(String, Expr),
-    DivAssign(String, Expr),
+    Let(Name, Type, Expr),
+    Assign(Name, Expr),
+    AddAssign(Name, Expr),
+    SubAssign(Name, Expr),
+    MulAssign(Name, Expr),
+    DivAssign(Name, Expr),
     Return(Expr),
     If(Expr, Vec<Stat>, Option<Vec<Stat>>),
     While(Expr, Vec<Stat>),
-    For(String, Expr, Vec<Stat>),
+    For(Name, Expr, Vec<Stat>),
 }
 
 #[derive(Debug)]
 pub enum Expr {
+    Name(Name),
     Int(i64),
     Float(f64),
     Char(char),
@@ -35,3 +37,6 @@ pub enum Expr {
     Negate(Box<Expr>),
     Not(Box<Expr>),
 }
+
+pub type Name = String;
+pub type Type = String;

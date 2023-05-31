@@ -11,14 +11,11 @@
 Note that this grammar does not describe operator precedence.
 
 ```
-program ::= {function}
-
-function ::= 'fn' '(' [params] ')' ['->' ident] '\n' {stat} 'end'
-params ::= param {',' param}
-param ::= ident ':' ident
+program ::= {stat}
 
 stat ::= '\n'
        | expr '\n'
+       | 'fn' '(' [params] ')' ['->' ident] '\n' {stat} 'end'
        | 'let' ident ':' ident ['=' expr] '\n'
        | ident '=' expr '\n'
        | ident '+=' expr '\n'
@@ -30,7 +27,11 @@ stat ::= '\n'
        | 'while' expr 'do' {stat} 'end'
        | 'for' ident 'in' expr 'do' {stat} 'end'
 
-expr ::= int | float | char | string
+params ::= param {',' param}
+param ::= ident ':' ident
+
+expr ::= ident
+       | int | float | char | string
        | '[' [exprs] ']'
        | '(' expr ')'
        | expr binop expr
